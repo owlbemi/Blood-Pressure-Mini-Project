@@ -12,7 +12,7 @@ Analysis of Diabetes and Oxygen Saturation Data (Blood Pressure)
 - Compared methods for estimating a data property (potentially variance) and found agreement.
 
 ## Used Packages
--psych
+- psych
 - dplyr
 - ggplot2
 - ggcorrplot
