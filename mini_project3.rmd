@@ -1,0 +1,255 @@
+---
+title: "Mini Project #3"
+output: pdf_document
+Author: Jake Lee
+urlcolor: blue
+geometry: "top = 1cm"
+always_allow_html: yes
+---
+**Question #1**
+
+```{r}
+##a
+#Set working directory
+setwd("/Users/owlbemi/Documents/STAT4360/project3_spring")
+diabetes <- read.csv("diabetes.csv")
+
+#Call packages
+library(psych)
+library(dplyr)
+library(ggplot2)
+library(ggcorrplot)
+
+#Set datasets
+response <- as.data.frame(diabetes$Outcome)
+response <- response %>%
+  rename("Outcome" = "diabetes$Outcome")
+predict <- as.data.frame(diabetes[1:8])
+training <- diabetes
+
+#Exploratory Analysis
+str(response)
+str(predict)
+str(training)
+
+corr <- cor(diabetes)
+head(corr)
+
+ggcorrplot(corr, lab = TRUE, outline.color = "white", ggtheme = theme_gray, title = "Correlation between variables in diabetes data")
+```
+
+Regarding correlation between Outcome and other predict variables, Glucose shows the highest correlation of 0.46, and BMI and Age also shows significantly high correlation of 0.28 and 0.24. Blood Pressure and Skin Thickness are the least correlated variables to Outcome.
+
+```{r}
+#Perform simple multiple linear regression
+fit <- lm(Outcome ~ Glucose.. + BMI.. + Age.., data = diabetes)
+summary(fit)
+
+#All variables show high correlation to Ourcome due to p-values that are less than 0.05.
+
+##b
+library(pROC)
+
+train <- diabetes[1:1000,]
+test <- diabetes[1001:2000,]
+
+#Create logistic model regarding all variables
+model <- glm(Outcome ~., family = binomial (link = 'logit'), data = train)
+summary(model)
+
+anova(model, test="Chisq")
+
+#Create new model regarding statistically significant variables
+new_model <- glm(Outcome ~ Pregnancies.. + Glucose.. + BloodPressure.. + BMI.. + DiabetesPedigreeFunction..,family = binomial (link = 'logit'), data = train)
+summary(new_model)
+
+#Create ROC plot using the new model
+predicted <- predict(new_model, test, type = "response")
+rocobj <- roc(test$Outcome, predicted)
+ggroc(rocobj)
+```
+##C
+Final Equation: $Outcome = 0.1608 * Pregnancies + 0.0321 * Glucose - 0.0126 * BloodPressure + 0.0974 * BMI + 0.8072 * DiabetesPedigreeFunction - 8.0085$
+
+```{r}
+#Provide summary of the new model
+summary(new_model)
+
+sd_error <- 1:5
+sd_error <- c(0.024879, 0.002858, 0.00441, 0.012796, 0.259237)
+new_summary <- as.data.frame(sd_error)
+
+#Compute confidence Interval
+confint(new_model, level = 0.95)
+
+#The outcome is expected to be 0 when there is no BloodPressure and Glucose present. If the glucose were to differ by one unit, outcome will differ by 0.0321 in average; similarly, if blood pressure differs by one unit, the outcome will differ by -0.0126.
+
+#Compute Training Error
+Predictions <- predict(new_model, data = test)
+testRMSE <- sqrt(mean((Predictions - test$Outcome)^2))
+testRMSE
+```
+
+**Question #2**
+
+```{r}
+##a
+#Fit a logistic regression model
+library(caret)
+fitControl <- trainControl(method = "LOOCV")
+log_model <- glm(Outcome ~. , data = diabetes)
+summary(log_model)
+
+#Compute confusion matrix
+t <- 0.5
+predict_full <- ifelse(predict(new_model, type="response")> t,1,0)
+actual_value <- train$Outcome
+conf_mat <- table(predict_full, actual_value)
+conf_mat
+
+#Sensitivity and Specificity
+sensitivity(conf_mat)
+specificity(conf_mat)
+
+#bb
+
+log_glm <- glm(Outcome ~ . , data = diabetes)
+log_lm <- lm(Outcome ~ . , data = diabetes)
+
+library(boot)
+
+cv.err <- cv.glm(diabetes, log_glm)
+
+cv.err <- sapply(1:5, FUN = function(i) {
+  fit <- glm(Outcome ~ poly(Pregnancies.., i) + poly(Glucose.., i) + poly(BloodPressure.., i) + poly(BMI.., 1) + poly(DiabetesPedigreeFunction.., i) + poly(Insulin.., i) + poly(Age.., i) + poly(SkinThickness.., i), data = diabetes)
+  cv.est <- cv.glm(diabetes, fit)$delta[1]
+  return(cv.est) })
+
+print(cv.err)
+
+##cc
+#Compute test error rate using LOOCV
+dup <- diabetes
+dup$Outcome <- as.factor(dup$Outcome)
+loc_model <- train(Outcome ~., data = dup, method = "glm", family = "binomial", trControl = fitControl)
+print(loc_model)
+
+##dd
+dupp <- diabetes
+dupp$Outcome <- as.factor(dupp$Outcome)
+locc_model <- train(Outcome ~ Pregnancies.. + Glucose.. + BloodPressure.. + BMI.. + DiabetesPedigreeFunction.., data = dupp, method = "glm", family = "binomial", trControl = fitControl)
+print(locc_model)
+
+##ee
+library(MASS)
+
+lda_model <- lda(Outcome ~ Pregnancies.. + Glucose.. + BloodPressure.. + BMI.. + DiabetesPedigreeFunction.., data = diabetes, CV = T)
+conf <- table(list(predicted = lda_model$class, observed = diabetes$Outcome))
+confusionMatrix(conf)
+
+
+##ff
+qda_model <- qda(Outcome ~ Pregnancies.. + Glucose.. + BloodPressure.. + BMI.. + DiabetesPedigreeFunction.., data = diabetes)
+
+predmodel_qda <- predict(qda_model, newdata = test)
+conf2 <- table(list(Predicted = predmodel_qda$class, observed = test$Outcome))
+
+confusionMatrix(conf2)
+
+##gg
+fac <- diabetes
+fac$Outcome <- as.factor(dup$Outcome)
+loc_model <- train(Outcome ~., data = fac, method = "glm", family = "binomial", trControl = fitControl)
+print(loc_model)
+
+fit <- train(Outcome~ .,
+             method     = "knn",
+             tuneGrid   = expand.grid(k = 1:20),
+             trControl  = fitControl,
+             metric     = "Accuracy",
+             data       = fac)
+
+print(fit)
+
+#Optimal K-value: 2
+```
+**Questions #3**
+
+```{r}
+##a
+setwd("/Users/owlbemi/Documents/STAT4360/project3_spring")
+oxy <- read.table("oxygen_saturation.txt")
+oxy <- as.data.frame(oxy)
+
+library(janitor)
+
+oxy <- oxy %>%
+        row_to_names(row_number = 1)
+
+p <- ggplot(data = oxy, aes(x = pos, y = osm)) + geom_point() + geom_abline(intercept = 0, slope = 1)
+
+oxy$diff <- abs(as.numeric(oxy$pos) - as.numeric(oxy$osm))
+
+q <- ggplot(data = oxy, aes(x = diff)) + geom_boxplot()
+
+p
+q
+```
+##b
+Smaller values for $\theta$ is better, as total deviance refers to overall range of the measure of the population equality of the situation. Smaller values for TDI would imply that the data is more clustered around the central, and as p = 0.90, it would give us the value of 90th quantile of $|D|$. If there is a smaller total deviance, it would give us a value close to the center value (50th quantile), giving us better estimation.
+
+##c
+The point estimator $\hat\theta$ would be the bias of the estimator where: $\beta_F(\hat\theta, \theta) = E_F[\hat\theta_F]-\theta_F$
+
+```{r}
+##d
+#Set variable for bootstrap
+theta.hat <- function(sample){
+  return (var(sample))
+}
+
+R <- 1e3
+
+#Estimator function
+g <- function(x, x_bar){
+  (x - x_bar)^2
+}
+
+n = 72
+
+obs.data <- rnorm(n, mean = mean(oxy$diff), sd = sd(oxy$diff))
+theta.hat.dist <- rep(0, R)
+
+for (boot in 1:R){
+  x.star <- sample(obs.data, n, replace = TRUE)
+  theta.hat.dist[boot] <- theta.hat(x.star)
+}
+
+#Compute bias
+g <- function(x, x_bar){
+  (x - x_bar)^2
+}
+
+mu.Fhat <- mean(theta.hat.dist)
+
+# Get the estimator
+theta.Fhat <- sum(sapply(obs.data, g, x_bar = mean(obs.data)))/n
+
+bias.boot <- mu.Fhat - theta.Fhat
+
+##e
+sample.var <- function (x, d){
+  return(var(x[d]))
+}
+
+# get the bootstrap object
+b <- boot(obs.data, sample.var, R)
+
+b
+
+#Confidence interval
+boot.ci(b, type = "bca")
+```
+
+##f
+Both methods show significantly low bias and standard error, meaning that the methods are well enoughh to be used interchangeably in real life. Between two methods: osm and pos, there is an agreement.
